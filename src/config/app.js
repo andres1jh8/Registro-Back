@@ -13,16 +13,8 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// ---------------- CORS ----------------
-// Permitir únicamente tu frontend desplegado en Vercel
-app.use(cors({
-  origin: 'https://registro-frontend-rho.vercel.app', // URL de tu frontend
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
-}));
-// --------------------------------------
-
 // Middlewares
+app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' })); // Para recibir firma en base64
 app.use(express.urlencoded({ extended: true }));
