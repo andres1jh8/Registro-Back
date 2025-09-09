@@ -1,7 +1,27 @@
 import { Entrada } from './entradas.model.js';
 import { Salida } from '../salidas/salidas.model.js';
-import fs from 'fs';
-import path from 'path';
+import { v2 as cloudinary } from 'cloudinary';
+
+// Configuración de Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// 🔹 Función helper para subir a Cloudinary desde buffer
+const uploadToCloudinary = (fileBuffer, folder, public_id) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { folder, public_id },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      }
+    );
+    uploadStream.end(fileBuffer);
+  });
+};
 
 const ajustarFechaLocal = (fechaStr) => {
   const fecha = fechaStr ? new Date(fechaStr) : new Date();
@@ -11,6 +31,7 @@ const ajustarFechaLocal = (fechaStr) => {
   return fechaLocal;
 };
 
+// ================== ADD ENTRADA ==================
 export const addEntrada = async (req, res) => {
   try {
     const { fecha, horaEntrada, nombre, dpi, motivo, empresa } = req.body;
@@ -35,27 +56,25 @@ export const addEntrada = async (req, res) => {
 
     const nuevoNumero = ultimaEntrada ? ultimaEntrada.numero + 1 : 1;
 
-    let firmaNombre = null;
-    let fotoDPINombre = null;
+    let firmaUrl = null;
+    let fotoDPIUrl = null;
 
-    if (req.files) {
-      if (req.files.firma && req.files.firma[0]) {
-        const ext = path.extname(req.files.firma[0].originalname);
-        firmaNombre = `${dpi}-${Date.now()}${ext}`;
-        fs.renameSync(req.files.firma[0].path, path.join('uploads', firmaNombre));
-      }
-      if (req.files.fotoDPI && req.files.fotoDPI[0]) {
-        const ext = path.extname(req.files.fotoDPI[0].originalname);
-        fotoDPINombre = `${dpi}-${Date.now()}${ext}`;
-        fs.renameSync(req.files.fotoDPI[0].path, path.join('uploads', fotoDPINombre));
-      }
+    // 🔹 Firma desde archivo subido por multer-cloudinary
+    if (req.files?.firma?.[0]) {
+      firmaUrl = req.files.firma[0].path; // path contiene la URL de Cloudinary
+    } 
+    // Firma desde base64
+    else if (req.body.firma) {
+      const result = await cloudinary.uploader.upload(req.body.firma, {
+        folder: "firmas",
+        public_id: `${dpi}-firma-${Date.now()}`
+      });
+      firmaUrl = result.secure_url;
     }
 
-    if (!firmaNombre && req.body.firma) {
-      const base64Data = req.body.firma.replace(/^data:image\/png;base64,/, '');
-      const fileName = `${dpi}-${Date.now()}.png`;
-      fs.writeFileSync(path.join('uploads', fileName), base64Data, 'base64');
-      firmaNombre = fileName;
+    // 🔹 Foto DPI desde archivo subido por multer-cloudinary
+    if (req.files?.fotoDPI?.[0]) {
+      fotoDPIUrl = req.files.fotoDPI[0].path; // path contiene la URL de Cloudinary
     }
 
     const nuevaEntrada = new Entrada({
@@ -66,8 +85,8 @@ export const addEntrada = async (req, res) => {
       dpi,
       motivo,
       empresa,
-      fotoDPI: fotoDPINombre,
-      firma: firmaNombre
+      fotoDPI: fotoDPIUrl,
+      firma: firmaUrl,
     });
 
     await nuevaEntrada.save();
@@ -88,6 +107,8 @@ export const addEntrada = async (req, res) => {
   }
 };
 
+
+// ================== UPDATE ENTRADA ==================
 export const updateEntrada = async (req, res) => {
   try {
     let updateData = { ...req.body };
@@ -95,36 +116,53 @@ export const updateEntrada = async (req, res) => {
       updateData.fecha = ajustarFechaLocal(updateData.fecha);
     }
 
-    if (req.files) {
-      if (req.files.firma && req.files.firma[0]) {
-        const ext = path.extname(req.files.firma[0].originalname);
-        const firmaNombre = `${updateData.dpi || 'firma'}-${Date.now()}${ext}`;
-        fs.renameSync(req.files.firma[0].path, path.join('uploads', firmaNombre));
-        updateData.firma = firmaNombre;
-      } else if (req.body.firma) {
-        const base64Data = req.body.firma.replace(/^data:image\/png;base64,/, '');
-        const fileName = `${updateData.dpi || 'firma'}-${Date.now()}.png`;
-        fs.writeFileSync(path.join('uploads', fileName), base64Data, 'base64');
-        updateData.firma = fileName;
-      }
-      if (req.files.fotoDPI && req.files.fotoDPI[0]) {
-        const ext = path.extname(req.files.fotoDPI[0].originalname);
-        const fotoDPINombre = `${updateData.dpi || 'dpi'}-${Date.now()}${ext}`;
-        fs.renameSync(req.files.fotoDPI[0].path, path.join('uploads', fotoDPINombre));
-        updateData.fotoDPI = fotoDPINombre;
-      }
+    // Nueva firma
+    if (req.files?.firma?.[0]) {
+      const result = await uploadToCloudinary(
+        req.files.firma[0].buffer,
+        "firmas",
+        `${updateData.dpi || 'firma'}-${Date.now()}`
+      );
+      updateData.firma = result.secure_url;
+    } else if (req.body.firma) {
+      const result = await cloudinary.uploader.upload(req.body.firma, {
+        folder: "firmas",
+        public_id: `${updateData.dpi || 'firma'}-${Date.now()}`
+      });
+      updateData.firma = result.secure_url;
     }
 
-    const updatedEntrada = await Entrada.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    // Nueva foto DPI
+    if (req.files?.fotoDPI?.[0]) {
+      const result = await uploadToCloudinary(
+        req.files.fotoDPI[0].buffer,
+        "dpi",
+        `${updateData.dpi || 'dpi'}-${Date.now()}`
+      );
+      updateData.fotoDPI = result.secure_url;
+    }
 
-    if (!updatedEntrada) return res.status(404).send({
-      success: false,
-      message: 'Entrada no encontrada'
+    const updatedEntrada = await Entrada.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    );
+
+    if (!updatedEntrada) {
+      return res.status(404).send({
+        success: false,
+        message: 'Entrada no encontrada'
+      });
+    }
+
+    res.send({
+      success: true,
+      message: 'Entrada actualizada',
+      data: updatedEntrada
     });
 
-    res.send({ success: true, message: 'Entrada actualizada', data: updatedEntrada });
-
   } catch (err) {
+    console.error("Error en updateEntrada:", err);
     res.status(500).send({
       success: false,
       message: 'Error al actualizar entrada',
@@ -133,6 +171,7 @@ export const updateEntrada = async (req, res) => {
   }
 };
 
+// ================== GET ENTRADAS ==================
 export const getEntradas = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -141,7 +180,6 @@ export const getEntradas = async (req, res) => {
     const year = req.query.year ? parseInt(req.query.year) : null;
     const all = req.query.all === "true";
 
-    // 🔎 nuevos filtros
     const dpi = req.query.dpi || null;
     const empresa = req.query.empresa || null;
 
@@ -153,14 +191,8 @@ export const getEntradas = async (req, res) => {
       };
     }
 
-    if (dpi) {
-      matchStage.dpi = dpi; // búsqueda exacta
-    }
-
-    if (empresa) {
-      // Usamos regex para búsqueda parcial e insensible a mayúsculas
-      matchStage.empresa = { $regex: empresa, $options: "i" };
-    }
+    if (dpi) matchStage.dpi = dpi;
+    if (empresa) matchStage.empresa = { $regex: empresa, $options: "i" };
 
     const aggregatePipeline = [
       { $match: matchStage },
@@ -184,15 +216,9 @@ export const getEntradas = async (req, res) => {
     const total = await Entrada.countDocuments(matchStage);
     const totalPages = Math.max(Math.ceil(total / limit), 1);
 
-    const entradasConUrl = entradas.map((entrada) => ({
-      ...entrada,
-      firma: entrada.firma ? `${req.protocol}://${req.get('host')}/uploads/${entrada.firma}` : null,
-      fotoDPI: entrada.fotoDPI ? `${req.protocol}://${req.get('host')}/uploads/${entrada.fotoDPI}` : null
-    }));
-
     res.send({
       success: true,
-      data: entradasConUrl,
+      data: entradas,
       page,
       totalPages,
       month: month || null,
@@ -211,7 +237,7 @@ export const getEntradas = async (req, res) => {
   }
 };
 
-
+// ================== GET MESES ==================
 export const getMeses = async (req, res) => {
   try {
     const meses = await Entrada.aggregate([
@@ -246,29 +272,15 @@ export const getMeses = async (req, res) => {
   }
 };
 
+// ================== GET ENTRADA BY ID ==================
 export const getEntradasById = async (req, res) => {
   try {
-    const entrada = await Entrada.aggregate([
-      { $match: { _id: Entrada.db.bson_serializer.ObjectId(req.params.id) } },
-      {
-        $lookup: {
-          from: 'salidas',
-          localField: '_id',
-          foreignField: 'entradaId',
-          as: 'salidas'
-        }
-      }
-    ]);
+    const entrada = await Entrada.findById(req.params.id).populate('salidas');
 
-    if (!entrada || entrada.length === 0) return res.status(404).send({ success: false, message: "No se encontró la Entrada" });
+    if (!entrada)
+      return res.status(404).send({ success: false, message: "No se encontró la Entrada" });
 
-    const entradaConUrl = {
-      ...entrada[0],
-      firma: entrada[0].firma ? `${req.protocol}://${req.get('host')}/uploads/${entrada[0].firma}` : null,
-      fotoDPI: entrada[0].fotoDPI ? `${req.protocol}://${req.get('host')}/uploads/${entrada[0].fotoDPI}` : null
-    };
-
-    res.send({ success: true, data: entradaConUrl });
+    res.send({ success: true, data: entrada });
 
   } catch (err) {
     console.error(err);
@@ -276,6 +288,7 @@ export const getEntradasById = async (req, res) => {
   }
 };
 
+// ================== DELETE ENTRADA ==================
 export const deleteEntrada = async (req, res) => {
   try {
     const entrada = await Entrada.findByIdAndDelete(req.params.id);

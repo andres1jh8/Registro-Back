@@ -1,7 +1,6 @@
 // src/entities/entradas/entradas.validators.js
 import { check } from 'express-validator';
 import { Entrada } from './entradas.model.js';
-import { Salida } from '../salidas/salidas.model.js';
 
 export const validarEntrada = [
   // Fecha
@@ -33,23 +32,10 @@ export const validarEntrada = [
 
   // DPI
   check('dpi')
-  .notEmpty()
-  .withMessage('DPI es requerido')
-  .isLength({ min: 13, max: 13 })
-  .withMessage('DPI debe tener 13 dígitos')
-  .custom((fecha) => {
-    const fechaEntrada = new Date(fecha);
-    const hoy = new Date();
-    // Ajustar a medianoche
-    fechaEntrada.setHours(0, 0, 0, 0);
-    hoy.setHours(0, 0, 0, 0);
-
-    if (fechaEntrada > hoy) {
-      throw new Error('La fecha no puede ser futura');
-    }
-    return true;
-  }),
-
+    .notEmpty()
+    .withMessage('DPI es requerido')
+    .isLength({ min: 13, max: 13 })
+    .withMessage('DPI debe tener 13 dígitos'),
 
   // Motivo
   check('motivo')
@@ -63,18 +49,29 @@ export const validarEntrada = [
     .notEmpty()
     .withMessage('Empresa es requerida'),
 
-  // Firma (Base64)
+  // Firma (archivo o Base64)
   check('firma')
-    .notEmpty()
-    .withMessage('Firma es requerida')
-    .matches(/^data:image\/(png|jpeg|jpg);base64,/)
-    .withMessage('Firma debe ser una imagen en Base64 (png/jpg/jpeg)'),
+    .custom((value, { req }) => {
+      if (!value && !req.files?.firma) {
+        throw new Error('Firma es requerida');
+      }
+      // Si viene en body como Base64, validar formato
+      if (value && !/^data:image\/(png|jpeg|jpg);base64,/.test(value)) {
+        throw new Error('Firma debe ser una imagen en Base64 (png/jpg/jpeg)');
+      }
+      return true;
+    }),
 
   // Foto DPI (opcional)
   check('fotoDPI')
     .optional()
-    .matches(/^.*\.(jpg|jpeg|png)$/)
-    .withMessage('Foto DPI debe ser un archivo jpg, jpeg o png'),
+    .custom((value, { req }) => {
+      if (req.files?.fotoDPI) return true; // archivo enviado
+      if (value && !/^.*\.(jpg|jpeg|png)$/.test(value)) {
+        throw new Error('Foto DPI debe ser un archivo jpg, jpeg o png');
+      }
+      return true;
+    }),
 
   // Validación extra: si existe horaSalida, horaEntrada no puede ser posterior
   check('horaEntrada')
