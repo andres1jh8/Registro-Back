@@ -1,73 +1,65 @@
-import logo from './logo.png';
-import './App.css';
+import { Router } from "express";
+import { addEntrada, getEntradas, getEntradasById, updateEntrada, deleteEntrada, getMeses } from "./entradas.controller.js";
+import { validarEntrada } from "./entradas.validators.js";
+import { validateFields } from "../../middlewares/validate-fields.js";
+import { upload } from "../../config/cloudinary.js";
+import { validateJWT, validateRoles } from "../../middlewares/validate.jwt.js";
 
-import homeIcon from './assets/icons/home.svg';
-import createIcon from './assets/icons/create.svg';
-import reportIcon from './assets/icons/report.svg';
+const router = Router();
 
-import CompShowRegister from './registro/ShowRegister';
-import CompCreateBlog from './registro/CreateRegister';
-import ReportContext from './ReportContext';
+// POST crear entrada
+router.post(
+  "/",
+  upload.fields([
+    { name: "firma", maxCount: 1 },
+    { name: "fotoDPI", maxCount: 1 }
+  ]),
+  //validateJWT,
+  //validateRoles("Admin","Employee"),
+  validarEntrada,
+  validateFields,
+  addEntrada
+);
 
-import { BrowserRouter, Route, Routes, Link } from 'react-router-dom';
-import { useRef } from 'react';
+// GET //todas las entradas
+router.get("/",
+  //[
+    //validateJWT,
+    //validateRoles("Admin","Employee")
+  //],  
+getEntradas);
 
-function App() {
-  const reportFnRef = useRef(() => {});
+// GET entradas por meses
+router.get("/meses", 
+  //[
+  //  validateJWT,
+ //   validateRoles("Admin","Employee")
+ // ], 
+getMeses);
 
-  return (
-    <div className="App">
-      <BrowserRouter>
-        <ReportContext.Provider value={{ imprimirReporte: () => reportFnRef.current() }}>
+// GET entrada por ID
+router.get("/:id", getEntradasById);
 
-          {/* Header */}
-          <header className="App-header">
-            <div className="header-left">
-              <img src={logo} className="App-logo" alt="logo" />
-            </div>
-            <div className="header-center">
-              <h1 className="App-title">Registro Visitas</h1>
-            </div>
-            <div className="header-right">
-              {/* Espacio para perfil de usuario */}
-            </div>
-          </header>
+// PUT actualizar entrada
+router.put(
+  "/:id",
+  upload.fields([
+    { name: "firma", maxCount: 1 },
+    { name: "fotoDPI", maxCount: 1 }
+  ]),
+ // validateJWT,
+  //validateRoles("Admin","Employee"),
+  validarEntrada,
+  validateFields,
+  updateEntrada
+);
 
-          {/* Body con sidebar y contenido */}
-          <div className="App-body">
+// DELETE entrada
+router.delete("/:id", 
+ // [
+  //  validateJWT,
+ //   validateRoles("Admin","Employee"),
+ // ],
+deleteEntrada);
 
-            {/* Sidebar izquierdo: solo aparece al hover */}
-            <aside className="sidebar">
-              <div className="btn-container">
-                <Link to="/" className="btn-nav">
-                  <img src={homeIcon} alt="Inicio" className="btn-icon" />
-                  <span>Inicio</span>
-                </Link>
-                <Link to="/create" className="btn-nav">
-                  <img src={createIcon} alt="Crear" className="btn-icon" />
-                  <span>Crear</span>
-                </Link>
-                <button className="btn-nav" onClick={() => reportFnRef.current()}>
-                  <img src={reportIcon} alt="Reporte" className="btn-icon" />
-                  <span>Reporte</span>
-                </button>
-              </div>
-            </aside>
-
-            {/* Contenido principal */}
-            <main className="main-content">
-              <Routes>
-                <Route path="/" element={<CompShowRegister reportFnRef={reportFnRef} />} />
-                <Route path="/create" element={<CompCreateBlog />} />
-              </Routes>
-            </main>
-
-          </div>
-
-        </ReportContext.Provider>
-      </BrowserRouter>
-    </div>
-  );
-}
-
-export default App;
+export default router;
