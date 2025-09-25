@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from "express";
 import { 
   addSalida, 
   getSalidas, 
@@ -8,35 +8,76 @@ import {
   getReporteMensual,
   generarExcelReporteMensual,
   getMovimientos
-} from './salidas.controller.js';
-import { validateAddSalida, validateUpdateSalida } from './salidas.validators.js';
+} from "./salidas.controller.js";
+import { validateAddSalida, validateUpdateSalida } from "./salidas.validators.js";
+import { validateJWT, validateRoles } from "../../middlewares/validate.jwt.js";
 
 const router = Router();
 
-//Get de todo
-router.get('/movimientos', getMovimientos);
+// Get de movimientos
+router.get(
+  "/movimientos",
+  validateJWT,
+  validateRoles("Admin", "Employee"),
+  getMovimientos
+);
 
 // Registrar salida
-router.post('/', validateAddSalida, addSalida);
+router.post(
+  "/",
+  validateJWT,
+  validateRoles("Admin", "Employee"),
+  validateAddSalida,
+  addSalida
+);
 
 // Listar todas las salidas
-router.get('/', getSalidas);
+router.get(
+  "/",
+  validateJWT,
+  validateRoles("Admin", "Employee"),
+  getSalidas
+);
 
 // Obtener salida por ID
-router.get('/:id', getSalidaById);
+router.get(
+  "/:id",
+  validateJWT,
+  validateRoles("Admin", "Employee"),
+  getSalidaById
+);
 
 // Actualizar salida
-router.put('/:id', validateUpdateSalida, updateSalida);
+router.put(
+  "/:id",
+  validateJWT,
+  validateRoles("Admin", "Employee"),
+  validateUpdateSalida,
+  updateSalida
+);
 
 // Eliminar salida
-router.delete('/:id', deleteSalida);
+router.delete(
+  "/:id",
+  validateJWT,
+  validateRoles("Admin"),
+  deleteSalida
+);
 
-//Reportes por Año y Mes
-router.get('/reporte/:anio/:mes', getReporteMensual);
+// Reportes por Año y Mes
+router.get(
+  "/reporte/:anio/:mes",
+  validateJWT,
+  validateRoles("Admin", "Employee"),
+  getReporteMensual
+);
 
 // Descargar Excel mensual
-router.get('/reporte/excel/:anio/:mes', generarExcelReporteMensual);
-
-
+router.get(
+  "/reporte/excel/:anio/:mes",
+  validateJWT,
+  validateRoles("Admin", "Employee"),
+  generarExcelReporteMensual
+);
 
 export default router;

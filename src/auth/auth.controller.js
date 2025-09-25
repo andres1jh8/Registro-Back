@@ -1,3 +1,4 @@
+// src/auth/auth.controller.js
 import User from "../entities/users/user.model.js"
 import { encrypt, checkPassword } from "../utils/encrypt.js"
 import { generateToken } from "../utils/jwt.js"

@@ -1,3 +1,4 @@
+// middlewares/authorize.roles.js
 /**
  * Middleware para autorizar el acceso a rutas basado en el rol del usuario.
  *

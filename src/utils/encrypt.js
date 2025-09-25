@@ -1,5 +1,5 @@
 // Archivo para encriptar la contraseña y validarla.
-
+// src/utils/encrypt.js
 'use strict'
 
 import { hash, verify } from "argon2"
