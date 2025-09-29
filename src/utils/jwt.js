@@ -10,7 +10,7 @@ export const generateToken = async (payload) => {
       payload,
       process.env.SECRET_KEY, // Usa SECRET_KEY como en .env
       {
-        expiresIn: "20m",
+        expiresIn: "2h",
         algorithm: "HS256",
       }
     );

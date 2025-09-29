@@ -38,7 +38,6 @@ export const addEntrada = async (req, res) => {
   try {
     const { fecha, horaEntrada, nombre, dpi, motivo, empresa } = req.body;
 
-    // Validaciones básicas
     if (!horaEntrada || !nombre || !dpi || !motivo || !empresa) {
       return res.status(400).json({ success: false, message: "Faltan campos obligatorios" });
     }
@@ -46,17 +45,14 @@ export const addEntrada = async (req, res) => {
       return res.status(400).json({ success: false, message: "Firma obligatoria" });
     }
 
-    // Ajustar fecha
     const fechaEntrada = fecha ? new Date(fecha) : new Date();
     fechaEntrada.setHours(0, 0, 0, 0);
 
-    // Número del mes
     const inicioMes = new Date(fechaEntrada.getFullYear(), fechaEntrada.getMonth(), 1);
     const finMes = new Date(fechaEntrada.getFullYear(), fechaEntrada.getMonth() + 1, 0);
     const ultimaEntrada = await Entrada.findOne({ fecha: { $gte: inicioMes, $lte: finMes } }).sort({ numero: -1 });
     const nuevoNumero = ultimaEntrada ? ultimaEntrada.numero + 1 : 1;
 
-    // URLs de Multer + CloudinaryStorage
     const firmaUrl = req.files.firma[0].path;
     const fotoDPIUrl = req.files.fotoDPI?.[0]?.path || null;
 
@@ -81,16 +77,9 @@ export const addEntrada = async (req, res) => {
     });
   } catch (err) {
     console.error("Error al registrar entrada:", err);
-    res.status(500).json({
-      success: false,
-      message: "Error al registrar entrada",
-      error: err.message
-    });
+    res.status(500).json({ success: false, message: "Error al registrar entrada", error: err.message });
   }
 };
-
-
-
 
 // ================== UPDATE ENTRADA ==================
 export const updateEntrada = async (req, res) => {
@@ -100,7 +89,6 @@ export const updateEntrada = async (req, res) => {
       updateData.fecha = ajustarFechaLocal(updateData.fecha);
     }
 
-    // Nueva firma
     if (req.files?.firma?.[0]) {
       const result = await uploadToCloudinary(
         req.files.firma[0].buffer,
@@ -116,7 +104,6 @@ export const updateEntrada = async (req, res) => {
       updateData.firma = result.secure_url;
     }
 
-    // Nueva foto DPI
     if (req.files?.fotoDPI?.[0]) {
       const result = await uploadToCloudinary(
         req.files.fotoDPI[0].buffer,
@@ -126,32 +113,15 @@ export const updateEntrada = async (req, res) => {
       updateData.fotoDPI = result.secure_url;
     }
 
-    const updatedEntrada = await Entrada.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true }
-    );
-
+    const updatedEntrada = await Entrada.findByIdAndUpdate(req.params.id, updateData, { new: true });
     if (!updatedEntrada) {
-      return res.status(404).send({
-        success: false,
-        message: 'Entrada no encontrada'
-      });
+      return res.status(404).send({ success: false, message: 'Entrada no encontrada' });
     }
 
-    res.send({
-      success: true,
-      message: 'Entrada actualizada',
-      data: updatedEntrada
-    });
-
+    res.send({ success: true, message: 'Entrada actualizada', data: updatedEntrada });
   } catch (err) {
     console.error("Error en updateEntrada:", err);
-    res.status(500).send({
-      success: false,
-      message: 'Error al actualizar entrada',
-      error: err.message
-    });
+    res.status(500).send({ success: false, message: 'Error al actualizar entrada', error: err.message });
   }
 };
 
@@ -167,12 +137,32 @@ export const getEntradas = async (req, res) => {
     const dpi = req.query.dpi || null;
     const empresa = req.query.empresa || null;
 
+    // ✅ Nuevos filtros
+    const startDate = req.query.startDate ? new Date(req.query.startDate) : null;
+    const endDate = req.query.endDate ? new Date(req.query.endDate) : null;
+    const day = req.query.day ? new Date(req.query.day) : null;
+
     const matchStage = {};
+
     if (month && year) {
       matchStage.fecha = {
         $gte: new Date(year, month - 1, 1),
         $lt: new Date(year, month, 1)
       };
+    }
+
+    if (day) {
+      const startOfDay = new Date(day);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(day);
+      endOfDay.setHours(23, 59, 59, 999);
+      matchStage.fecha = { $gte: startOfDay, $lt: endOfDay };
+    }
+
+    if (startDate && endDate) {
+      const endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      matchStage.fecha = { $gte: startDate, $lte: endOfDay };
     }
 
     if (dpi) matchStage.dpi = dpi;
@@ -205,19 +195,19 @@ export const getEntradas = async (req, res) => {
       data: entradas,
       page,
       totalPages,
-      month: month || null,
-      year: year || null,
-      dpi: dpi || null,
-      empresa: empresa || null
+      filtros: {
+        month: month || null,
+        year: year || null,
+        dpi: dpi || null,
+        empresa: empresa || null,
+        day: day || null,
+        startDate: startDate || null,
+        endDate: endDate || null
+      }
     });
-
   } catch (err) {
     console.error(err);
-    res.status(500).send({
-      success: false,
-      message: "Error al cargar Entradas",
-      error: err.message
-    });
+    res.status(500).send({ success: false, message: "Error al cargar Entradas", error: err.message });
   }
 };
 
@@ -225,15 +215,6 @@ export const getEntradas = async (req, res) => {
 export const getMeses = async (req, res) => {
   try {
     const meses = await Entrada.aggregate([
-      {
-        $lookup: {
-          from: 'salidas',
-          localField: '_id',
-          foreignField: 'entradaId',
-          as: 'salidas'
-        }
-      },
-      { $match: { 'salidas.0': { $exists: true } } },
       {
         $group: {
           _id: { year: { $year: "$fecha" }, month: { $month: "$fecha" } }
@@ -256,16 +237,13 @@ export const getMeses = async (req, res) => {
   }
 };
 
+
 // ================== GET ENTRADA BY ID ==================
 export const getEntradasById = async (req, res) => {
   try {
     const entrada = await Entrada.findById(req.params.id).populate('salidas');
-
-    if (!entrada)
-      return res.status(404).send({ success: false, message: "No se encontró la Entrada" });
-
+    if (!entrada) return res.status(404).send({ success: false, message: "No se encontró la Entrada" });
     res.send({ success: true, data: entrada });
-
   } catch (err) {
     console.error(err);
     res.status(500).send({ success: false, message: "Error al obtener Entrada", error: err.message });
