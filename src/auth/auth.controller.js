@@ -7,14 +7,21 @@ import { generateToken } from "../utils/jwt.js";
  * - Se requiere autorización de un Admin (usernameAdmin + passwordAdmin)
  * - Valida que el email y username del nuevo usuario no estén duplicados
  * - Encripta la contraseña
- * - Por defecto los usuarios son EMPLOYEE
+ * - El rol puede ser "Admin" o "Employee" (default: Employee)
  */
 export const registerUser = async (req, res) => {
   try {
-    const { name, surname, username, email, password, phone, usernameAdmin, passwordAdmin } = req.body;
+    let { name, surname, username, email, password, phone, usernameAdmin, passwordAdmin, role } = req.body;
+
+    // Limpiar campos para evitar espacios invisibles
+    usernameAdmin = usernameAdmin?.trim();
+    passwordAdmin = passwordAdmin?.trim();
+    username = username?.trim();
+    email = email?.trim();
+    password = password?.trim();
 
     // Validar datos del nuevo usuario
-    if (!name || !surname || !username || !email || !password || !phone) {
+    if (!name || !surname || !username || !email || !password || !phone || !role) {
       return res.status(400).json({ message: "Faltan datos del nuevo usuario." });
     }
 
@@ -23,7 +30,7 @@ export const registerUser = async (req, res) => {
       return res.status(401).json({ message: "Se requiere autorización de un administrador." });
     }
 
-    // Buscar Admin en la DB
+    // Buscar Admin en la DB (trim aquí también)
     const admin = await User.findOne({ username: usernameAdmin }).select("+password role");
     if (!admin) {
       return res.status(403).json({ message: "Administrador no encontrado." });
@@ -34,10 +41,10 @@ export const registerUser = async (req, res) => {
       return res.status(403).json({ message: "El usuario proporcionado no tiene rol de administrador." });
     }
 
-    // Verificar contraseña del Admin
-    const validAdminPassword = await checkPassword(admin.password, passwordAdmin);
+    // Verificar contraseña del Admin (trim aquí también)
+    const validAdminPassword = await checkPassword(admin.password, passwordAdmin.trim());
     if (!validAdminPassword) {
-      return res.status(403).json({ message: "Contraseña de administrador incorrecta." });
+      return res.status(403).json({ message: "Contraseña de administrador incorrecta. Revisa espacios o errores de tipeo." });
     }
 
     // Verificar duplicados
@@ -47,6 +54,9 @@ export const registerUser = async (req, res) => {
     // Encriptar contraseña
     const hashedPassword = await encrypt(password);
 
+    // Validar rol permitido
+    const newRole = ["Admin", "Employee"].includes(role) ? role : "Employee";
+
     // Crear nuevo usuario
     const newUser = new User({
       name,
@@ -55,7 +65,7 @@ export const registerUser = async (req, res) => {
       email,
       password: hashedPassword,
       phone,
-      role: "Employee", // rol por defecto
+      role: newRole,
     });
 
     await newUser.save();
